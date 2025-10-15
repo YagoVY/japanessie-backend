@@ -1,18 +1,10 @@
 [phases.setup]
-nixPkgs = [
-  'nodejs_20',
-  'chromium',
-  'liberation_ttf',
-  'nss',
-  'freetype',
-  'harfbuzz'
-]
+nixPkgs = ['nodejs_20', 'chromium']
 
 [phases.install]
-cmds = ['npm ci --omit=dev']
+cmds = ['npm install --production']
 
 [phases.build]
-cmds = []
 
 [start]
 cmd = 'npm start'
