@@ -110,7 +110,6 @@ coverage/
 
 # Docker
 .dockerignore
-Dockerfile
 
 # AWS
 .aws/
