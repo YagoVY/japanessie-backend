@@ -2,41 +2,25 @@
 [phases.setup]
 nixPkgs = [
   "chromium",
-  "fonts.liberation_ttf",
-  "libGL",
-  "libGLU",
-  "xorg.libX11",
-  "xorg.libXcomposite",
-  "xorg.libXdamage",
-  "xorg.libXext",
-  "xorg.libXfixes",
-  "xorg.libXrandr",
-  "xorg.libXScrnSaver",
-  "xorg.libXtst",
-  "xorg.libXi",
-  "xorg.libXrender",
-  "xorg.libxcb",
-  "xorg.libXau",
-  "xorg.libXdmcp",
-  "libdrm",
-  "mesa",
+  "liberation_ttf",
   "nss",
   "atk",
   "cairo",
   "pango",
   "gdk-pixbuf",
   "gtk3",
-  "alsa-lib"
+  "libdrm",
+  "mesa"
 ]
 
 [phases.install]
 cmds = [
-  "npm ci --only=production",
-  "ln -sf /nix/store/*-chromium-*/bin/chromium /usr/bin/chromium-browser"
+  "npm ci --only=production"
 ]
 
 [phases.build]
 cmds = [
+  "ln -sf /nix/store/*-chromium-*/bin/chromium /usr/bin/chromium-browser || true",
   "echo 'Chrome dependencies installed successfully'"
 ]
 

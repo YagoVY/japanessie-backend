@@ -16,32 +16,23 @@ try {
   const isRailway = process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID;
   
   if (isRailway) {
-    console.log('🚂 Detected Railway environment, installing system Chrome...');
+    console.log('🚂 Detected Railway environment, verifying system Chrome...');
     
-    // Install Chromium and dependencies
-    const installCommands = [
-      'apt-get update',
-      'apt-get install -y chromium-browser fonts-liberation libasound2 libatk-bridge2.0-0 libdrm2 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libxss1 libnss3'
-    ];
-    
-    for (const cmd of installCommands) {
-      try {
-        console.log(`Running: ${cmd}`);
-        execSync(cmd, { stdio: 'inherit' });
-      } catch (error) {
-        console.warn(`Warning: ${cmd} failed:`, error.message);
-      }
-    }
-    
-    // Verify Chrome installation
+    // On Railway with nixpacks.toml, Chrome should already be installed
+    // Just verify it's available
     try {
       execSync('which chromium-browser', { stdio: 'pipe' });
-      console.log('✅ Chromium installed successfully');
+      console.log('✅ Chromium found in system PATH');
     } catch (error) {
-      console.warn('⚠️ Chromium not found, will use fallback paths');
+      try {
+        execSync('which chromium', { stdio: 'pipe' });
+        console.log('✅ Chromium found in system PATH');
+      } catch (error2) {
+        console.warn('⚠️ Chromium not found in PATH, will use fallback paths');
+      }
     }
   } else {
-    console.log('💻 Local development environment, skipping system Chrome installation');
+    console.log('💻 Local development environment, skipping system Chrome verification');
   }
   
   // Create Chrome path configuration
