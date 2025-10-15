@@ -1,34 +1,20 @@
-# Railway Nixpacks configuration for Node.js + Chrome/Puppeteer support
 [phases.setup]
 nixPkgs = [
-  "nodejs_20",
-  "npm",
-  "chromium",
-  "liberation_ttf",
-  "nss",
-  "atk",
-  "cairo",
-  "pango",
-  "gdk-pixbuf",
-  "gtk3",
-  "libdrm",
-  "mesa"
+  'nodejs_20',
+  'chromium',
+  'liberation_ttf',
+  'nss',
+  'freetype',
+  'harfbuzz'
 ]
 
 [phases.install]
-cmds = [
-  "npm ci --only=production"
-]
-
-[phases.build]
-cmds = [
-  "ln -sf /nix/store/*-chromium-*/bin/chromium /usr/bin/chromium-browser || true",
-  "echo 'Chrome dependencies installed successfully'"
-]
+cmds = ['npm ci --omit=dev']
 
 [start]
-cmd = "npm start"
+cmd = 'npm start'
 
 [variables]
-PUPPETEER_SKIP_DOWNLOAD = "true"
-PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium-browser"
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true'
+PUPPETEER_EXECUTABLE_PATH = '/nix/store/*-chromium-*/bin/chromium'
+NODE_ENV = 'production'
