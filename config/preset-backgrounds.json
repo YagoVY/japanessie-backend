@@ -1,0 +1,17 @@
+{
+  "preset_backgrounds": {
+    "wave-vertical": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/wave-vertical-bg.png",
+    "wave-horizontal": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/wave-horizontal-bg.png",
+    "geometric-pattern": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/geometric-pattern-bg.png",
+    "minimalist-lines": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/minimalist-lines-bg.png",
+    "japanese-motif": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/japanese-motif-bg.png",
+    "ja-panda-horizontal": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/ja-panda-horizontal-bg.png",
+    "ja-umbrella": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/ja-umbrella-bg.png",
+    "ja-sushi": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/ja-sushi-bg.png",
+    "ja-tako": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/ja-tako-bg.png",
+    "ja-saru": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/ja-saru-bg.png",
+    "ja-sake": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/ja-sake-bg.png",
+    "ja-kuruma": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/ja-kuruma-bg.png",
+    "ja-kabuki": "https://japanessie-designs.s3.eu-north-1.amazonaws.com/backgrounds/ja-kabuki-bg.png"
+  }
+}

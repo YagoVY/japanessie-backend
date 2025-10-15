@@ -1,0 +1,1082 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print Renderer</title>
+    
+    <!-- Base64 Embedded Font Files - Exact same as frontend -->
+    <style>
+        @font-face {
+            font-family: 'Yuji Syuku';
+            src: url('data:font/truetype;charset=utf-8;base64,{{YujiSyukuBase64}}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: block;
+        }
+        
+        @font-face {
+            font-family: 'Shippori Antique';
+            src: url('data:font/truetype;charset=utf-8;base64,{{ShipporiAntiqueBase64}}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: block;
+        }
+        
+        @font-face {
+            font-family: 'Huninn';
+            src: url('data:font/truetype;charset=utf-8;base64,{{HuninnBase64}}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: block;
+        }
+        
+        @font-face {
+            font-family: 'Rampart One';
+            src: url('data:font/truetype;charset=utf-8;base64,{{RampartOneBase64}}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: block;
+        }
+        
+        @font-face {
+            font-family: 'Cherry Bomb One';
+            src: url('data:font/truetype;charset=utf-8;base64,{{CherryBombOneBase64}}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: block;
+        }
+    </style>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            font-family: 'Yuji Syuku', sans-serif;
+        }
+        
+        #print-canvas {
+            display: block;
+            background: transparent;
+        }
+        
+        /* Hide everything except the canvas */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="print-canvas"></canvas>
+    
+    <script>
+        // Print specifications - must match backend exactly
+        const PRINT_SPECS = {
+            PRINT_AREA: {
+                WIDTH_INCHES: 12,
+                HEIGHT_INCHES: 16,
+                DPI: 300
+            },
+            CANVAS: {
+                WIDTH: 600,
+                HEIGHT: 600,
+                DPI: 72
+            },
+            FRONTEND_MAPPING: {
+                horizontal: { x: 200, y: 78, width: 200, height: 270 },
+                vertical: { x: 200, y: 78, width: 200, height: 270 }
+            },
+            FONTS: {
+                AVAILABLE: [
+                    'Yuji Syuku',
+                    'Shippori Antique', 
+                    'Huninn',
+                    'Rampart One',
+                    'Cherry Bomb One'
+                ],
+                DEFAULT: 'Yuji Syuku',
+                MIN_SIZE: 12,
+                MAX_SIZE: 100,
+                DEFAULT_SIZE: 40
+            },
+            TEXT: {
+                LINE_HEIGHT: 1.1,
+                LETTER_SPACING: 0.12,
+                VERTICAL_SPACING: 0.85,
+                HYPHEN_REPLACEMENT: {
+                    from: /[ー\-‒–—−﹘﹣－]/g,
+                    to: '｜'
+                }
+            }
+        };
+
+        // TextLayoutEngine - Exact copy from frontend
+        class TextLayoutEngine {
+            constructor(canvasWidth = 600, canvasHeight = 600) {
+                this.canvasWidth = canvasWidth;
+                this.canvasHeight = canvasHeight;
+                
+                this.config = {
+                    printArea: {
+                        widthInches: PRINT_SPECS.PRINT_AREA.WIDTH_INCHES,
+                        heightInches: PRINT_SPECS.PRINT_AREA.HEIGHT_INCHES,
+                        dpi: PRINT_SPECS.PRINT_AREA.DPI
+                    },
+                    
+                    canvasMapping: PRINT_SPECS.FRONTEND_MAPPING,
+                    
+                    margins: {
+                        top: 3,
+                        bottom: 3,
+                        left: 3,
+                        right: 3
+                    },
+                    
+                    baseFontSize: PRINT_SPECS.FONTS.DEFAULT_SIZE,
+                    minFontSize: PRINT_SPECS.FONTS.MIN_SIZE,
+                    scaleStep: 2,
+                    
+                    lineSpacing: PRINT_SPECS.TEXT.LINE_HEIGHT,
+                    
+                    verticalSpacing: {
+                        charSpacingMultiplier: PRINT_SPECS.TEXT.VERTICAL_SPACING,
+                        columnMarginFactor: 0.3
+                    }
+                };
+            }
+            
+            getTextArea(orientation = 'horizontal') {
+                const mapping = this.config.canvasMapping[orientation];
+                
+                return {
+                    x: mapping.x + this.config.margins.left,
+                    y: mapping.y + this.config.margins.top,
+                    width: mapping.width - this.config.margins.left - this.config.margins.right,
+                    height: mapping.height - this.config.margins.top - this.config.margins.bottom,
+                    orientation: orientation
+                };
+            }
+            
+            textWidth(text, fontSize, fontFamily, ctx) {
+                ctx.font = `${fontSize}px ${fontFamily}`;
+                return ctx.measureText(String(text)).width;
+            }
+
+            fitText(text, ignoredFontSize, fontFamily, ctx, orientation = 'horizontal') {
+                if (!text || !text.trim()) {
+                    return this.createEmptyLayout(orientation);
+                }
+                
+                const textArea = this.getTextArea(orientation);
+                let currentFontSize = this.config.baseFontSize;
+                let bestLayout = null;
+                let attempts = 0;
+                const maxAttempts = Math.ceil((this.config.baseFontSize - this.config.minFontSize) / this.config.scaleStep) + 5;
+
+                const hasSpace = /\s+/.test(text);
+                const baseWidth = this.textWidth(text.trim(), currentFontSize, fontFamily, ctx);
+                const forceTwoLines = (orientation === 'horizontal' && hasSpace && baseWidth > textArea.width);
+                
+                while (currentFontSize >= this.config.minFontSize && attempts < maxAttempts) {
+                    attempts++;
+                    
+                    const layout = this.createLayoutAtSize(
+                        text,
+                        currentFontSize,
+                        fontFamily,
+                        ctx,
+                        orientation,
+                        textArea,
+                        forceTwoLines
+                    );
+                    const fitsCompletely = this.checkLayoutFits(layout, textArea, orientation, ctx);
+
+                    if (fitsCompletely) {
+                        bestLayout = layout;
+                        break;
+                    }
+                    
+                    if (!bestLayout || currentFontSize > bestLayout.fontSize) {
+                        bestLayout = layout;
+                    }
+                    
+                    currentFontSize -= this.config.scaleStep;
+                }
+                
+                if (!bestLayout) {
+                    bestLayout = this.createLayoutAtSize(text, this.config.minFontSize, fontFamily, ctx, orientation, textArea);
+                }
+                
+                bestLayout.metadata = {
+                    baseFontSize: this.config.baseFontSize,
+                    finalSize: bestLayout.fontSize,
+                    scalingAttempts: attempts,
+                    orientation: orientation
+                };
+                
+                return bestLayout;
+            }
+            
+            createLayoutAtSize(text, fontSize, fontFamily, ctx, orientation, textArea, forceTwoLines = false) {
+                ctx.font = `${fontSize}px ${fontFamily}`;
+                const lineHeight = fontSize * this.config.lineSpacing;
+
+                let lines = [];
+                if (orientation === 'vertical') {
+                    lines = [this.cleanTextForVertical(text)];
+                } else {
+                    lines = this.createHorizontalLinesWithSpaceBreaking(
+                        text, fontSize, fontFamily, ctx, textArea, forceTwoLines
+                    );
+                }
+                
+                const positions = this.calculatePositions(lines, fontSize, fontFamily, lineHeight, ctx, orientation, textArea);
+                
+                return {
+                    fits: true,
+                    fitsInPrintArea: true,
+                    lines: lines,
+                    allLines: lines,
+                    positions,
+                    fontSize,
+                    lineHeight,
+                    totalHeight: lines.length * lineHeight,
+                    textArea: textArea,
+                    printArea: this.config.canvasMapping[orientation],
+                    metadata: {
+                        originalFontSize: fontSize,
+                        linesCount: lines.length,
+                        wasTruncated: false,
+                        orientation: orientation
+                    }
+                };
+            }
+            
+            createHorizontalLinesWithSpaceBreaking(text, fontSize, fontFamily, ctx, textArea, forceTwoLines = false) {
+                ctx.font = `${fontSize}px ${fontFamily}`;
+                const trimmed = String(text || '').trim();
+
+                const oneLineWidth = ctx.measureText(trimmed).width;
+                if (!forceTwoLines && oneLineWidth <= textArea.width) {
+                    return [trimmed];
+                }
+
+                const words = trimmed.split(/\s+/).filter(Boolean);
+
+                if (forceTwoLines && words.length >= 2) {
+                    const left  = words.slice(0, 1).join(' ');
+                    const right = words.slice(1).join(' ');
+                    if (ctx.measureText(left).width  <= textArea.width &&
+                        ctx.measureText(right).width <= textArea.width) {
+                        return [left, right];
+                    }
+                }
+
+                if (words.length > 1) {
+                    let bestIdx = -1;
+                    let bestScore = Infinity;
+                    for (let i = 1; i < words.length; i++) {
+                        const left  = words.slice(0, i).join(' ');
+                        const right = words.slice(i).join(' ');
+                        const wL = ctx.measureText(left).width;
+                        const wR = ctx.measureText(right).width;
+                        if (wL <= textArea.width && wR <= textArea.width) {
+                            const score = Math.abs(wL - wR);
+                            if (score < bestScore) { bestScore = score; bestIdx = i; }
+                        }
+                    }
+                    if (bestIdx > 0) {
+                        return [words.slice(0, bestIdx).join(' '), words.slice(bestIdx).join(' ')];
+                    }
+                }
+
+                return [trimmed];
+            }
+
+            cleanTextForVertical(text) {
+                return String(text || '')
+                    .replace(/\s+/g, '')
+                    .replace(/[ー\-‒–—−﹘﹣－]/g, '｜')
+                    .trim();
+            }
+
+            checkLayoutFits(layout, textArea, orientation, ctx) {
+                if (orientation === 'vertical') {
+                    const text = layout.lines[0] || '';
+                    const charHeight = layout.lineHeight * this.config.verticalSpacing.charSpacingMultiplier;
+                    const totalHeight = text.length * charHeight;
+                    return totalHeight <= textArea.height;
+                } else {
+                    const totalHeight = layout.lines.length * layout.lineHeight;
+                    if (totalHeight > textArea.height) return false;
+                    
+                    ctx.font = `${layout.fontSize}px ${layout.fontFamily || 'Arial'}`;
+                    return layout.lines.every(line => {
+                        const lineWidth = ctx.measureText(line).width;
+                        return lineWidth <= textArea.width;
+                    });
+                }
+            }
+            
+            calculatePositions(lines, fontSize, fontFamily, lineHeight, ctx, orientation, textArea) {
+                ctx.font = `${fontSize}px ${fontFamily}`;
+                const positions = [];
+                
+                if (orientation === 'vertical') {
+                    const startY = textArea.y + fontSize * 0.85;
+                    const columnX = textArea.x + (textArea.width / 2 + 45);
+                    const charSpacing = lineHeight * this.config.verticalSpacing.charSpacingMultiplier;
+                    
+                    const text = lines[0] || '';
+                    const chars = text.split('');
+                    
+                    chars.forEach((char, charIndex) => {
+                        const x = columnX;
+                        const y = startY + (charIndex * charSpacing);
+                        
+                        positions.push({
+                            x,
+                            y,
+                            line: char,
+                            width: ctx.measureText(char).width,
+                            height: fontSize,
+                            useReducedSpacing: false
+                        });
+                    });
+                    
+                } else {
+                    const startY = textArea.y + fontSize * 1.6;
+                    
+                    lines.forEach((line, index) => {
+                        const metrics = ctx.measureText(line);
+                        const x = textArea.x + (textArea.width - metrics.width) / 2;
+                        const y = startY + (index * lineHeight);
+                        
+                        positions.push({
+                            x,
+                            y,
+                            line,
+                            width: metrics.width,
+                            height: fontSize,
+                            useReducedSpacing: true,
+                            letterSpacingReduction: fontSize * 0.10
+                        });
+                    });
+                }
+                
+                return positions;
+            }
+            
+            createEmptyLayout(orientation = 'horizontal') {
+                const textArea = this.getTextArea(orientation);
+                
+                return {
+                    fits: true,
+                    fitsInPrintArea: true,
+                    lines: [],
+                    positions: [],
+                    fontSize: 0,
+                    lineHeight: 0,
+                    totalHeight: 0,
+                    textArea: textArea,
+                    printArea: this.config.canvasMapping[orientation],
+                    metadata: { 
+                        empty: true,
+                        orientation: orientation
+                    }
+                };
+            }
+        }
+
+        // Print renderer class
+        class PrintRenderer {
+            constructor(customWidth, customHeight, isTestMode = false) {
+                this.canvas = document.getElementById('print-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.layoutEngine = new TextLayoutEngine();
+                this.debugMode = false; // Disable debug mode for production
+                this.isTestMode = isTestMode;
+                
+                // Set dimensions - use custom size for test mode, otherwise use print specs
+                if (isTestMode && customWidth && customHeight) {
+                    this.printWidth = customWidth;
+                    this.printHeight = customHeight;
+                    console.log('[PrintRenderer] Test mode: Using custom canvas size', { width: customWidth, height: customHeight });
+                } else {
+                    // Set print dimensions (12" x 16" at 300 DPI)
+                    this.printWidth = PRINT_SPECS.PRINT_AREA.WIDTH_INCHES * PRINT_SPECS.PRINT_AREA.DPI; // 3600px
+                    this.printHeight = PRINT_SPECS.PRINT_AREA.HEIGHT_INCHES * PRINT_SPECS.PRINT_AREA.DPI; // 4800px
+                }
+                
+                this.canvas.width = this.printWidth;
+                this.canvas.height = this.printHeight;
+                
+                // Set high DPI scaling
+                const devicePixelRatio = window.devicePixelRatio || 1;
+                this.canvas.style.width = this.printWidth + 'px';
+                this.canvas.style.height = this.printHeight + 'px';
+                this.ctx.scale(devicePixelRatio, devicePixelRatio);
+                
+                // Set high quality rendering
+                this.ctx.imageSmoothingEnabled = true;
+                this.ctx.imageSmoothingQuality = 'high';
+                
+                // Debug logging
+                this.debugLog('PrintRenderer initialized', {
+                    canvasWidth: this.canvas.width,
+                    canvasHeight: this.canvas.height,
+                    printWidth: this.printWidth,
+                    printHeight: this.printHeight,
+                    isTestMode: this.isTestMode,
+                    devicePixelRatio: devicePixelRatio
+                });
+            }
+            
+            async initialize() {
+                if (this.isTestMode) {
+                    console.log('[PrintRenderer] Initializing test mode renderer...');
+                    // For test mode, we don't need to load fonts again as they're already loaded
+                    // Just verify they're available
+                    await this.verifyFonts();
+                }
+            }
+            
+            debugLog(message, data = null) {
+                if (this.debugMode) {
+                    if (data && typeof data === 'object') {
+                        // Filter out large arrays and buffer data to prevent log spam
+                        const filteredData = this.filterDebugData(data);
+                        console.log(`[PrintRenderer] ${message}:`, JSON.stringify(filteredData, null, 2));
+                    } else {
+                        console.log(`[PrintRenderer] ${message}`, data || '');
+                    }
+                }
+            }
+            
+            filterDebugData(obj, maxArrayLength = 10, maxStringLength = 100) {
+                if (Array.isArray(obj)) {
+                    if (obj.length > maxArrayLength) {
+                        return `[Array with ${obj.length} items - showing first ${maxArrayLength}]: ${JSON.stringify(obj.slice(0, maxArrayLength))}...`;
+                    }
+                    return obj.map(item => this.filterDebugData(item, maxArrayLength, maxStringLength));
+                }
+                
+                if (typeof obj === 'string' && obj.length > maxStringLength) {
+                    return `${obj.substring(0, maxStringLength)}... [${obj.length} chars total]`;
+                }
+                
+                if (obj && typeof obj === 'object') {
+                    const filtered = {};
+                    for (const [key, value] of Object.entries(obj)) {
+                        // Skip large buffer-like data
+                        if (Array.isArray(value) && value.length > 50 && typeof value[0] === 'number') {
+                            filtered[key] = `[Large array with ${value.length} numbers - omitted]`;
+                        } else if (typeof value === 'string' && value.length > maxStringLength) {
+                            filtered[key] = `${value.substring(0, maxStringLength)}... [${value.length} chars]`;
+                        } else {
+                            filtered[key] = this.filterDebugData(value, maxArrayLength, maxStringLength);
+                        }
+                    }
+                    return filtered;
+                }
+                
+                return obj;
+            }
+            
+            async verifyFonts() {
+                this.debugLog('Verifying font availability...');
+                
+                const fonts = [
+                    'Yuji Syuku',
+                    'Shippori Antique', 
+                    'Huninn',
+                    'Rampart One',
+                    'Cherry Bomb One'
+                ];
+                
+                const fontStatus = {};
+                
+                // First, try to load fonts explicitly
+                for (const font of fonts) {
+                    try {
+                        // Use document.fonts.load() to ensure font is loaded
+                        await document.fonts.load(`20px ${font}`);
+                        this.debugLog(`Font loaded via document.fonts.load: ${font}`);
+                    } catch (error) {
+                        this.debugLog(`Font load failed: ${font}`, error.message);
+                    }
+                }
+                
+                // Wait a bit for fonts to be ready
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                for (const font of fonts) {
+                    try {
+                        // Test with a distinctive character that would look very different in different fonts
+                        const testText = 'A'; // Simple character that varies significantly between fonts
+                        
+                        // Test with Arial first
+                        this.ctx.font = `20px Arial`;
+                        const arialMetrics = this.ctx.measureText(testText);
+                        
+                        // Test with target font
+                        this.ctx.font = `20px ${font}`;
+                        const targetMetrics = this.ctx.measureText(testText);
+                        
+                        const isDifferent = Math.abs(arialMetrics.width - targetMetrics.width) > 0.1;
+                        
+                        fontStatus[font] = {
+                            loaded: true,
+                            width: targetMetrics.width,
+                            actualBoundingBoxAscent: targetMetrics.actualBoundingBoxAscent,
+                            actualBoundingBoxDescent: targetMetrics.actualBoundingBoxDescent,
+                            arialWidth: arialMetrics.width,
+                            isDifferentFromArial: isDifferent,
+                            difference: Math.abs(arialMetrics.width - targetMetrics.width)
+                        };
+                        
+                        this.debugLog(`Font verification: ${font}`, fontStatus[font]);
+                    } catch (error) {
+                        fontStatus[font] = { loaded: false, error: error.message };
+                        this.debugLog(`Font failed: ${font}`, error.message);
+                    }
+                }
+                
+                return fontStatus;
+            }
+            
+            testFontApplication(fontFamily, fontSize, testText = 'テスト') {
+                this.debugLog(`Testing font application: ${fontFamily} at ${fontSize}px`);
+                
+                // Test with multiple fallback fonts to be more sensitive
+                const fallbackFonts = ['Arial', 'sans-serif', 'serif', 'monospace'];
+                const fallbackResults = {};
+                
+                // Test with each fallback
+                for (const fallback of fallbackFonts) {
+                    this.ctx.font = `${fontSize}px ${fallback}`;
+                    const metrics = this.ctx.measureText(testText);
+                    fallbackResults[fallback] = {
+                        width: metrics.width,
+                        actualBoundingBoxAscent: metrics.actualBoundingBoxAscent,
+                        actualBoundingBoxDescent: metrics.actualBoundingBoxDescent
+                    };
+                }
+                
+                // Test with target font
+                this.ctx.font = `${fontSize}px ${fontFamily}`;
+                const targetMetrics = this.ctx.measureText(testText);
+                
+                // Check if target font is different from all fallbacks
+                const isDifferentFromAll = fallbackFonts.every(fallback => {
+                    const fallbackWidth = fallbackResults[fallback].width;
+                    return Math.abs(fallbackWidth - targetMetrics.width) > 0.1;
+                });
+                
+                // Also test with a simple character that varies more between fonts
+                const simpleTest = 'A';
+                this.ctx.font = `${fontSize}px Arial`;
+                const arialSimple = this.ctx.measureText(simpleTest);
+                this.ctx.font = `${fontSize}px ${fontFamily}`;
+                const targetSimple = this.ctx.measureText(simpleTest);
+                
+                const comparison = {
+                    fontFamily: fontFamily,
+                    fontSize: fontSize,
+                    testText: testText,
+                    fallbackResults: fallbackResults,
+                    target: {
+                        width: targetMetrics.width,
+                        actualBoundingBoxAscent: targetMetrics.actualBoundingBoxAscent,
+                        actualBoundingBoxDescent: targetMetrics.actualBoundingBoxDescent
+                    },
+                    simpleTest: {
+                        arial: arialSimple.width,
+                        target: targetSimple.width,
+                        difference: Math.abs(arialSimple.width - targetSimple.width)
+                    },
+                    fontApplied: isDifferentFromAll,
+                    isDifferentFromArial: Math.abs(fallbackResults.Arial.width - targetMetrics.width) > 0.1
+                };
+                
+                this.debugLog('Font application test result', comparison);
+                return comparison;
+            }
+            
+            drawDebugGuides() {
+                if (!this.debugMode) return;
+                
+                // Save current state
+                this.ctx.save();
+                
+                // Draw print area boundaries
+                this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(0, 0, this.printWidth, this.printHeight);
+                
+                // Draw text area boundaries for both orientations
+                const horizontalArea = this.layoutEngine.getTextArea('horizontal');
+                const verticalArea = this.layoutEngine.getTextArea('vertical');
+                
+                // Scale areas to print coordinates
+                const scaleX = this.printWidth / this.layoutEngine.canvasWidth;
+                const scaleY = this.printHeight / this.layoutEngine.canvasHeight;
+                
+                // Horizontal text area
+                this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+                this.ctx.strokeRect(
+                    horizontalArea.x * scaleX,
+                    horizontalArea.y * scaleY,
+                    horizontalArea.width * scaleX,
+                    horizontalArea.height * scaleY
+                );
+                
+                // Vertical text area
+                this.ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';
+                this.ctx.strokeRect(
+                    verticalArea.x * scaleX,
+                    verticalArea.y * scaleY,
+                    verticalArea.width * scaleX,
+                    verticalArea.height * scaleY
+                );
+                
+                // Draw center lines
+                this.ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.printWidth / 2, 0);
+                this.ctx.lineTo(this.printWidth / 2, this.printHeight);
+                this.ctx.moveTo(0, this.printHeight / 2);
+                this.ctx.lineTo(this.printWidth, this.printHeight / 2);
+                this.ctx.stroke();
+                
+                // Restore state
+                this.ctx.restore();
+            }
+            
+            async renderDesign(designParams, useFrontendLogic = false) {
+                this.debugLog('Starting renderDesign', designParams);
+                
+                // Wait for fonts to load
+                await document.fonts.ready;
+                this.debugLog('Fonts ready');
+                
+                // Force load specific fonts for canvas rendering
+                const fontsToLoad = [
+                    'Yuji Syuku',
+                    'Shippori Antique', 
+                    'Huninn',
+                    'Rampart One',
+                    'Cherry Bomb One'
+                ];
+                
+                this.debugLog('Force loading fonts for canvas...');
+                for (const font of fontsToLoad) {
+                    try {
+                        // Load font with multiple sizes to ensure it's available
+                        await document.fonts.load(`12px ${font}`);
+                        await document.fonts.load(`20px ${font}`);
+                        await document.fonts.load(`40px ${font}`);
+                        await document.fonts.load(`256px ${font}`);
+                        this.debugLog(`Font loaded for canvas: ${font}`);
+                    } catch (error) {
+                        this.debugLog(`Font load error: ${font}`, error.message);
+                    }
+                }
+                
+                // Wait additional time for fonts to be fully available
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+                // Verify font availability
+                const fontStatus = await this.verifyFonts();
+                this.debugLog('Font verification complete', fontStatus);
+                
+                
+                // Clear canvas
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                // Draw debug guides
+                this.drawDebugGuides();
+                
+                // Extract design parameters
+                const {
+                    text,
+                    fontFamily = 'Yuji Syuku',
+                    fontSize = 40,
+                    color = '#000000',
+                    orientation = 'horizontal'
+                } = designParams;
+                
+                this.debugLog('Design parameters extracted', {
+                    text,
+                    fontFamily,
+                    fontSize,
+                    color,
+                    orientation,
+                    note: fontSize === 40 ? 'Using default fontSize' : `Using actual fontSize: ${fontSize}px from frontend`
+                });
+                
+                // TEST 2: Font Metrics Validation
+                this.debugLog('TEST 2: FONT METRICS VALIDATION');
+                const testText = "ヤゴテ";
+                const testFontSize = 40;
+                this.ctx.font = `${testFontSize}px ${fontFamily}`;
+                const metrics = this.ctx.measureText(testText);
+                this.debugLog('Backend font metrics:', {
+                    text: testText,
+                    fontSize: testFontSize,
+                    fontFamily: fontFamily,
+                    width: metrics.width,
+                    actualBoundingBoxAscent: metrics.actualBoundingBoxAscent,
+                    actualBoundingBoxDescent: metrics.actualBoundingBoxDescent,
+                    actualBoundingBoxLeft: metrics.actualBoundingBoxLeft,
+                    actualBoundingBoxRight: metrics.actualBoundingBoxRight
+                });
+                
+                if (!text || !text.trim()) {
+                    this.debugLog('No text provided, returning empty canvas');
+                    return this.canvas.toDataURL('image/png');
+                }
+                
+                // Test font application before layout
+                const fontTest = this.testFontApplication(fontFamily, fontSize, text);
+                
+                let layout;
+                
+                // CRITICAL FIX: Check if frontend provided coordinate data
+                if (designParams.textCoordinates && designParams.textCoordinates.coordinates) {
+                    // USE FRONTEND COORDINATES: Frontend sent actual coordinate data
+                    this.debugLog('✅ USING FRONTEND COORDINATES - skipping TextLayoutEngine entirely');
+                    this.debugLog('Frontend coordinate data received:', {
+                        coordinatesCount: designParams.textCoordinates.coordinates.length,
+                        printArea: designParams.textCoordinates.printArea,
+                        text: designParams.textCoordinates.text,
+                        letterSpacing: designParams.letterSpacing || 'default'
+                    });
+                    
+                    // Use the frontend coordinates directly - no layout engine needed!
+                    layout = {
+                        fits: true,
+                        fontSize: fontSize, // Use original font size from frontend
+                        lines: [text],
+                        positions: designParams.textCoordinates.coordinates.map(coord => ({
+                            x: coord.x,
+                            y: coord.y,
+                            line: coord.char || text,
+                            useReducedSpacing: false,
+                            frontendCoordinate: true // Flag to indicate this is from frontend
+                        })),
+                        textArea: designParams.textCoordinates.printArea,
+                        printArea: designParams.textCoordinates.printArea,
+                        source: 'frontend-coordinates'
+                    };
+                    
+                    this.debugLog('✅ FRONTEND COORDINATES APPLIED:', {
+                        positionsCount: layout.positions.length,
+                        source: 'frontend-coordinates',
+                        note: 'No backend layout calculations needed!'
+                    });
+                    
+                } else if (useFrontendLogic) {
+                    // FRONTEND LOGIC: Use original font size, simple positioning
+                    this.debugLog('Using FRONTEND LOGIC - bypassing TextLayoutEngine adjustments');
+                    
+                    // Create a simple layout that mimics frontend behavior
+                    // Use canvas coordinates (600x600) that will be scaled to print coordinates
+                    const canvasCenterX = this.layoutEngine.canvasWidth / 2; // 300
+                    const canvasCenterY = this.layoutEngine.canvasHeight / 2; // 300
+                    
+                    layout = {
+                        fits: true,
+                        fontSize: fontSize, // Use original font size, no adjustments
+                        lines: [text],
+                        positions: [{
+                            x: canvasCenterX, // Center horizontally in canvas coordinates
+                            y: canvasCenterY, // Center vertically in canvas coordinates
+                            line: text,
+                            useReducedSpacing: false
+                        }],
+                        textArea: {
+                            x: canvasCenterX - 100,
+                            y: canvasCenterY - 50,
+                            width: 200,
+                            height: 100,
+                            orientation: orientation
+                        },
+                        printArea: {
+                            x: 0,
+                            y: 0,
+                            width: this.printWidth,
+                            height: this.printHeight
+                        }
+                    };
+                    
+                    this.debugLog('Frontend logic result', {
+                        fits: layout.fits,
+                        fontSize: layout.fontSize,
+                        lines: layout.lines,
+                        positionsCount: layout.positions.length,
+                        textArea: layout.textArea,
+                        printArea: layout.printArea
+                    });
+                } else {
+                    // BACKEND LOGIC: Use TextLayoutEngine with adjustments
+                    this.debugLog('Using BACKEND LOGIC - running TextLayoutEngine.fitText...');
+                    layout = this.layoutEngine.fitText(
+                        text,
+                        fontSize,
+                        fontFamily,
+                        this.ctx,
+                        orientation
+                    );
+                    
+                    this.debugLog('TextLayoutEngine result', {
+                        fits: layout.fits,
+                        fontSize: layout.fontSize,
+                        lines: layout.lines,
+                        positionsCount: layout.positions.length,
+                        textArea: layout.textArea,
+                        printArea: layout.printArea,
+                        fontTest: fontTest
+                    });
+                }
+                
+                // Scale positions from canvas coordinates to print coordinates
+                const scaleX = this.printWidth / this.layoutEngine.canvasWidth;
+                const scaleY = this.printHeight / this.layoutEngine.canvasHeight;
+                
+                this.debugLog('Scaling calculations', {
+                    scaleX,
+                    scaleY,
+                    canvasWidth: this.layoutEngine.canvasWidth,
+                    canvasHeight: this.layoutEngine.canvasHeight,
+                    printWidth: this.printWidth,
+                    printHeight: this.printHeight
+                });
+                
+                // Set font and color
+                this.ctx.fillStyle = color;
+                this.ctx.textAlign = 'left';
+                this.ctx.textBaseline = 'alphabetic';
+                
+                // Render text at print resolution
+                this.debugLog('Rendering text positions...');
+                for (let i = 0; i < layout.positions.length; i++) {
+                    const position = layout.positions[i];
+                    
+                    let printX, printY;
+                    
+                    // CRITICAL FIX: Handle frontend coordinates differently
+                    if (position.frontendCoordinate) {
+                        // Frontend coordinates are already in print area coordinate system
+                        // Scale them directly to print canvas coordinates
+                        const printAreaScaleX = this.printWidth / layout.printArea.width;
+                        const printAreaScaleY = this.printHeight / layout.printArea.height;
+                        printX = position.x * printAreaScaleX;
+                        printY = position.y * printAreaScaleY;
+                        
+                        this.debugLog(`Frontend coordinate ${i}:`, {
+                            originalX: position.x,
+                            originalY: position.y,
+                            printAreaWidth: layout.printArea.width,
+                            printAreaHeight: layout.printArea.height,
+                            printCanvasWidth: this.printWidth,
+                            printCanvasHeight: this.printHeight,
+                            printAreaScaleX,
+                            printAreaScaleY,
+                            finalPrintX: printX,
+                            finalPrintY: printY
+                        });
+                    } else {
+                        // Backend-generated coordinates need full canvas scaling
+                        printX = position.x * scaleX;
+                        printY = position.y * scaleY;
+                        
+                        this.debugLog(`Backend coordinate ${i}:`, {
+                            originalX: position.x,
+                            originalY: position.y,
+                            scaleX,
+                            scaleY,
+                            finalPrintX: printX,
+                            finalPrintY: printY
+                        });
+                    }
+                    // CRITICAL FIX: Handle font size scaling for frontend vs backend coordinates
+                    let printFontSize;
+                    if (position.frontendCoordinate) {
+                        // Frontend coordinates: Scale font size based on print area scaling
+                        const printAreaScale = Math.max(
+                            this.printWidth / layout.printArea.width,
+                            this.printHeight / layout.printArea.height
+                        );
+                        printFontSize = fontSize * printAreaScale;
+                        
+                        this.debugLog(`Frontend font scaling:`, {
+                            originalFontSize: fontSize,
+                            printAreaScale,
+                            finalPrintFontSize: printFontSize
+                        });
+                    } else {
+                        // Backend coordinates: Use existing scaling logic
+                        printFontSize = fontSize * Math.max(scaleX, scaleY) * 2;
+                        
+                        this.debugLog(`Backend font scaling:`, {
+                            originalFontSize: fontSize,
+                            scaleX,
+                            scaleY,
+                            maxScale: Math.max(scaleX, scaleY),
+                            finalPrintFontSize: printFontSize
+                        });
+                    }
+                    
+                    // ENHANCED DEBUG: Show the actual scaling calculation
+                    console.log(`[PrintRenderer] FONT SCALING DEBUG - Position ${i}:`);
+                    console.log(`  📥 Frontend font size: ${fontSize}px`);
+                    console.log(`  🔧 TextLayoutEngine adjusted size: ${layout.fontSize}px`);
+                    console.log(`  📏 Scale factor: ${Math.max(scaleX, scaleY)}`);
+                    console.log(`  🎯 FINAL print font size: ${printFontSize}px`);
+                    console.log(`  📊 Calculation: ${fontSize} × ${Math.max(scaleX, scaleY)} = ${printFontSize}`);
+                    
+                    // Log actual numeric values
+                    console.log(`[PrintRenderer] Position ${i} DETAILS:`);
+                    console.log(`  Original coordinates: x=${position.x}, y=${position.y}`);
+                    console.log(`  Print coordinates: x=${printX}, y=${printY}`);
+                    console.log(`  Original font size: ${layout.fontSize}px`);
+                    console.log(`  Print font size: ${printFontSize}px`);
+                    console.log(`  Text content: "${position.line}"`);
+                    console.log(`  Font family: "${fontFamily}"`);
+                    console.log(`  Use reduced spacing: ${position.useReducedSpacing}`);
+                    
+                    this.ctx.font = `${printFontSize}px ${fontFamily}`;
+                    
+                    // TEST 3: Canvas State Verification
+                    console.log(`  🎨 CANVAS FONT STRING: "${this.ctx.font}"`);
+                    console.log(`  🔍 Canvas context font property: ${this.ctx.font}`);
+                    console.log(`  📐 Canvas state verification:`);
+                    console.log(`    - ctx.font: "${this.ctx.font}"`);
+                    console.log(`    - ctx.textAlign: "${this.ctx.textAlign}"`);
+                    console.log(`    - ctx.textBaseline: "${this.ctx.textBaseline}"`);
+                    console.log(`    - ctx.fillStyle: "${this.ctx.fillStyle}"`);
+                    console.log(`    - ctx.globalAlpha: ${this.ctx.globalAlpha}`);
+                    console.log(`    - ctx.lineWidth: ${this.ctx.lineWidth}`);
+                    console.log(`    - ctx.lineCap: "${this.ctx.lineCap}"`);
+                    console.log(`    - ctx.lineJoin: "${this.ctx.lineJoin}"`);
+                    console.log(`    - ctx.miterLimit: ${this.ctx.miterLimit}`);
+                    console.log(`    - ctx.shadowBlur: ${this.ctx.shadowBlur}`);
+                    console.log(`    - ctx.shadowColor: "${this.ctx.shadowColor}"`);
+                    console.log(`    - ctx.shadowOffsetX: ${this.ctx.shadowOffsetX}`);
+                    console.log(`    - ctx.shadowOffsetY: ${this.ctx.shadowOffsetY}`);
+                    console.log(`    - ctx.globalCompositeOperation: "${this.ctx.globalCompositeOperation}"`);
+                    console.log(`    - ctx.imageSmoothingEnabled: ${this.ctx.imageSmoothingEnabled}`);
+                    console.log(`    - ctx.imageSmoothingQuality: "${this.ctx.imageSmoothingQuality}"`);
+                    console.log(`    - ctx.direction: "${this.ctx.direction}"`);
+                    console.log(`    - ctx.fontKerning: "${this.ctx.fontKerning}"`);
+                    console.log(`    - ctx.textRenderingOptimization: "${this.ctx.textRenderingOptimization}"`);
+                    
+                    // Test the actual font being applied
+                    const appliedFont = this.ctx.font;
+                    console.log(`  Applied font string: "${appliedFont}"`);
+                    
+                    // Measure the text with the applied font
+                    const textMetrics = this.ctx.measureText(position.line);
+                    console.log(`  Text metrics: width=${textMetrics.width}, ascent=${textMetrics.actualBoundingBoxAscent}, descent=${textMetrics.actualBoundingBoxDescent}`);
+                    
+                    // Draw position marker for debugging
+                    if (this.debugMode) {
+                        this.ctx.save();
+                        this.ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.strokeRect(printX - 5, printY - 5, 10, 10);
+                        
+                        // Draw text bounds
+                        this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+                        this.ctx.strokeRect(printX, printY - textMetrics.actualBoundingBoxAscent, textMetrics.width, textMetrics.actualBoundingBoxAscent + textMetrics.actualBoundingBoxDescent);
+                        this.ctx.restore();
+                    }
+                    
+                    if (position.useReducedSpacing && position.line.length > 1) {
+                        // Apply letter spacing
+                        let currentX = printX;
+                        const reduction = position.letterSpacingReduction || 0;
+                        
+                        console.log(`  Rendering with letter spacing, reduction: ${reduction}`);
+                        
+                        for (let j = 0; j < position.line.length; j++) {
+                            const char = position.line[j];
+                            this.ctx.fillText(char, currentX, printY);
+                            
+                            const charWidth = this.ctx.measureText(char).width;
+                            const extraSpacing = printFontSize * 0.12;
+                            currentX += charWidth - reduction + extraSpacing;
+                            
+                            console.log(`    Char "${char}": width=${charWidth}, x=${currentX - charWidth + reduction - extraSpacing}`);
+                        }
+                    } else {
+                        console.log(`  Rendering without letter spacing`);
+                        this.ctx.fillText(position.line, printX, printY);
+                    }
+                }
+                
+                this.debugLog('Rendering complete');
+                return this.canvas.toDataURL('image/png');
+            }
+        }
+
+        // Global renderer instance
+        window.printRenderer = new PrintRenderer();
+
+        // Function to be called by Puppeteer
+        window.renderPrintDesign = async function(designParams, canvasSize, isTestMode, useFrontendLogic) {
+            try {
+                console.log('[PrintRenderer] Starting renderPrintDesign with params:', designParams);
+                console.log('[PrintRenderer] Canvas size:', canvasSize);
+                console.log('[PrintRenderer] Test mode:', isTestMode);
+                console.log('[PrintRenderer] Use frontend logic:', useFrontendLogic);
+                
+                // If test mode, create a new renderer with custom canvas size
+                let renderer = window.printRenderer;
+                if (isTestMode && canvasSize) {
+                    console.log('[PrintRenderer] Creating test renderer with custom canvas size');
+                    renderer = new PrintRenderer(canvasSize.width, canvasSize.height, true);
+                    await renderer.initialize();
+                }
+                
+                // Pass the frontend logic flag to the renderer
+                const dataUrl = await renderer.renderDesign(designParams, useFrontendLogic);
+                
+                const result = {
+                    success: true,
+                    dataUrl: dataUrl,
+                    dimensions: {
+                        width: renderer.printWidth,
+                        height: renderer.printHeight,
+                        dpi: isTestMode ? 72 : PRINT_SPECS.PRINT_AREA.DPI
+                    },
+                    debug: {
+                        canvasWidth: renderer.canvas.width,
+                        canvasHeight: renderer.canvas.height,
+                        designParams: designParams,
+                        dataUrlLength: dataUrl.length,
+                        isTestMode: isTestMode,
+                        customCanvasSize: canvasSize,
+                        useFrontendLogic: useFrontendLogic
+                    }
+                };
+                
+                console.log('[PrintRenderer] Render complete:', result);
+                return result;
+            } catch (error) {
+                console.error('[PrintRenderer] Render failed:', error);
+                return {
+                    success: false,
+                    error: error.message,
+                    stack: error.stack
+                };
+            }
+        };
+
+        // Signal that the page is ready
+        window.printRendererReady = true;
+    </script>
+</body>
+</html>

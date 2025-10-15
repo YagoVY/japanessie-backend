@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: japanessie-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_BUCKET_NAME
+        sync: false
+      - key: PRINTFUL_API_KEY
+        sync: false
+      - key: PRINTFUL_STORE_ID
+        sync: false
+      - key: PRINTFUL_CATALOG_PRODUCT_ID
+        sync: false
+      - key: SHOPIFY_WEBHOOK_SECRET
+        sync: false
+      - key: SHOPIFY_STORE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: PRINT_RENDERER_V2
+        value: "1"
+      - key: RATE_LIMIT_WINDOW_MS
+        value: "60000"
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: "300"
+      - key: LOG_LEVEL
+        value: info

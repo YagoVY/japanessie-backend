@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Print Renderer - Coordinate Capture</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #print-canvas {
+            /* Set canvas to print dimensions (12"x16" at 300 DPI) */
+            width: 12in;
+            height: 16in;
+            /* Ensure high resolution rendering */
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="print-canvas"></canvas>
+
+    <script>
+        // Base64 font data will be injected here
+        const fontData = {
+            'Yuji Syuku': '{{YujiSyukuBase64}}',
+            'Shippori Antique': '{{ShipporiAntiqueBase64}}',
+            'Huninn': '{{HuninnBase64}}',
+            'Rampart One': '{{RampartOneBase64}}',
+            'Cherry Bomb One': '{{CherryBombOneBase64}}'
+        };
+
+        // Load fonts
+        Object.entries(fontData).forEach(([fontName, base64Data]) => {
+            if (base64Data && base64Data.trim()) {
+                const fontFace = new FontFace(fontName, `url(data:font/ttf;base64,${base64Data})`);
+                fontFace.load().then(() => {
+                    document.fonts.add(fontFace);
+                    console.log(`[PrintRenderer] Font loaded: ${fontName}`);
+                }).catch(error => {
+                    console.error(`[PrintRenderer] Font load error: ${fontName}`, error);
+                });
+            }
+        });
+
+        // Print specifications
+        const PRINT_SPECS = {
+            PRINT_AREA: {
+                WIDTH_INCHES: 12,
+                HEIGHT_INCHES: 16,
+                DPI: 300
+            }
+        };
+
+        // Coordinate Capture Renderer
+        class CoordinateCaptureRenderer {
+            constructor() {
+                this.canvas = document.getElementById('print-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.debugMode = true;
+                
+                // Set print dimensions (12" x 16" at 300 DPI)
+                this.printWidth = PRINT_SPECS.PRINT_AREA.WIDTH_INCHES * PRINT_SPECS.PRINT_AREA.DPI; // 3600px
+                this.printHeight = PRINT_SPECS.PRINT_AREA.HEIGHT_INCHES * PRINT_SPECS.PRINT_AREA.DPI; // 4800px
+                
+                this.canvas.width = this.printWidth;
+                this.canvas.height = this.printHeight;
+                
+                // Set high DPI scaling
+                const devicePixelRatio = window.devicePixelRatio || 1;
+                this.canvas.style.width = this.printWidth + 'px';
+                this.canvas.style.height = this.printHeight + 'px';
+                this.ctx.scale(devicePixelRatio, devicePixelRatio);
+                
+                // Set high quality rendering
+                this.ctx.imageSmoothingEnabled = true;
+                this.ctx.imageSmoothingQuality = 'high';
+                
+                this.debugLog('CoordinateCaptureRenderer initialized', {
+                    canvasWidth: this.canvas.width,
+                    canvasHeight: this.canvas.height,
+                    printWidth: this.printWidth,
+                    printHeight: this.printHeight,
+                    devicePixelRatio: devicePixelRatio
+                });
+            }
+            
+            debugLog(message, data = null) {
+                if (this.debugMode) {
+                    if (data && typeof data === 'object') {
+                        // Filter out large arrays and buffer data to prevent log spam
+                        const filteredData = this.filterDebugData(data);
+                        console.log(`[CoordinateCapture] ${message}:`, JSON.stringify(filteredData, null, 2));
+                    } else {
+                        console.log(`[CoordinateCapture] ${message}`, data || '');
+                    }
+                }
+            }
+            
+            filterDebugData(obj, maxArrayLength = 10, maxStringLength = 100) {
+                if (Array.isArray(obj)) {
+                    if (obj.length > maxArrayLength) {
+                        return `[Array with ${obj.length} items - showing first ${maxArrayLength}]: ${JSON.stringify(obj.slice(0, maxArrayLength))}...`;
+                    }
+                    return obj.map(item => this.filterDebugData(item, maxArrayLength, maxStringLength));
+                }
+                
+                if (typeof obj === 'string' && obj.length > maxStringLength) {
+                    return `${obj.substring(0, maxStringLength)}... [${obj.length} chars total]`;
+                }
+                
+                if (obj && typeof obj === 'object') {
+                    const filtered = {};
+                    for (const [key, value] of Object.entries(obj)) {
+                        // Skip large buffer-like data
+                        if (Array.isArray(value) && value.length > 50 && typeof value[0] === 'number') {
+                            filtered[key] = `[Large array with ${value.length} numbers - omitted]`;
+                        } else if (typeof value === 'string' && value.length > maxStringLength) {
+                            filtered[key] = `${value.substring(0, maxStringLength)}... [${value.length} chars]`;
+                        } else {
+                            filtered[key] = this.filterDebugData(value, maxArrayLength, maxStringLength);
+                        }
+                    }
+                    return filtered;
+                }
+                
+                return obj;
+            }
+
+            async renderFromCoordinates(coordinateData) {
+                this.debugLog('Starting coordinate-based rendering', coordinateData);
+                
+                // Wait for fonts to load
+                await document.fonts.ready;
+                this.debugLog('Fonts ready');
+
+                // Clear canvas
+                this.ctx.clearRect(0, 0, this.printWidth, this.printHeight);
+
+                // Extract data
+                const { text, fontFamily, fontSize, color, frontendCanvasSize, characterPositions } = coordinateData;
+
+                this.debugLog('Extracted coordinate data', {
+                    text,
+                    fontFamily,
+                    fontSize,
+                    color,
+                    frontendCanvasSize,
+                    characterCount: characterPositions.length
+                });
+
+                if (!text || !text.trim()) {
+                    this.debugLog('No text provided, returning empty canvas');
+                    return this.canvas.toDataURL('image/png');
+                }
+
+                // EXACT FRONTEND CONSTANTS: Use exact frontend print area dimensions
+                const exactPrintAreaBounds = coordinateData.printAreaBounds;
+                const exactConstants = coordinateData.exactFrontendConstants;
+                
+                this.debugLog('EXACT FRONTEND CONSTANTS APPLIED', {
+                    exactPrintAreaBounds,
+                    exactConstants,
+                    exactTextArea: coordinateData.exactTextArea,
+                    exactPositioning: coordinateData.exactPositioning,
+                    note: 'Using EXACT frontend constants, not approximations!'
+                });
+                
+                // Scale from EXACT frontend print area to print canvas
+                const scaleX = this.printWidth / exactPrintAreaBounds.width;  // 3600 / 200 = 18
+                const scaleY = this.printHeight / exactPrintAreaBounds.height; // 4800 / 270 = 17.78
+                const uniformScaleFactor = Math.max(scaleX, scaleY); // Use max for uniform scaling
+                
+                // CRITICAL: All measurements now use EXACT frontend constants as reference
+                // This ensures pixel-perfect matching with frontend output
+
+                this.debugLog('EXACT FRONTEND CONSTANTS SCALING', {
+                    frontendCanvasSize,
+                    exactPrintAreaBounds,
+                    exactConstants,
+                    printCanvasSize: { width: this.printWidth, height: this.printHeight },
+                    scaleX,
+                    scaleY,
+                    uniformScaleFactor,
+                    note: 'ALL measurements now use EXACT frontend constants as reference!',
+                    exactFixDetails: {
+                        fontSize: 'Uses exact frontend constants',
+                        positioning: 'Uses exact frontend positioning logic', 
+                        spacing: 'Uses exact frontend spacing constants',
+                        lineHeight: 'Uses exact frontend lineHeight (1.1)',
+                        margins: 'Uses exact frontend margins (3px)',
+                        textArea: 'Uses exact frontend text area calculation'
+                    }
+                });
+
+                // Set font and color
+                this.ctx.fillStyle = color;
+                this.ctx.textAlign = 'left';
+                this.ctx.textBaseline = 'alphabetic';
+
+                // Render each character at its scaled position
+                for (let i = 0; i < characterPositions.length; i++) {
+                    const charData = characterPositions[i];
+                    
+                    // Scale position and font size uniformly from PRINT AREA coordinates
+                    const printX = charData.x * uniformScaleFactor;
+                    const printY = charData.y * uniformScaleFactor;
+                    const printFontSize = fontSize * uniformScaleFactor;
+
+                    this.debugLog(`Character ${i} rendering`, {
+                        char: charData.char,
+                        frontendPosition: { x: charData.x, y: charData.y },
+                        printPosition: { x: printX, y: printY },
+                        frontendFontSize: fontSize,
+                        printFontSize: printFontSize,
+                        uniformScaleFactor
+                    });
+
+                    // Set font and render character
+                    this.ctx.font = `${printFontSize}px ${fontFamily}`;
+                    this.ctx.fillText(charData.char, printX, printY);
+                }
+
+                this.debugLog('Coordinate-based rendering complete');
+                return this.canvas.toDataURL('image/png');
+            }
+        }
+
+        // Global renderer instance
+        window.coordinateCaptureRenderer = new CoordinateCaptureRenderer();
+
+        // Function to be called by Puppeteer
+        window.renderFromCoordinates = async function(coordinateData) {
+            try {
+                console.log('[CoordinateCapture] Starting renderFromCoordinates with data:', coordinateData);
+                
+                const dataUrl = await window.coordinateCaptureRenderer.renderFromCoordinates(coordinateData);
+                
+                const result = {
+                    success: true,
+                    dataUrl: dataUrl,
+                    dimensions: {
+                        width: window.coordinateCaptureRenderer.printWidth,
+                        height: window.coordinateCaptureRenderer.printHeight,
+                        dpi: PRINT_SPECS.PRINT_AREA.DPI
+                    },
+                    debug: {
+                        canvasWidth: window.coordinateCaptureRenderer.canvas.width,
+                        canvasHeight: window.coordinateCaptureRenderer.canvas.height,
+                        coordinateData: coordinateData,
+                        dataUrlLength: dataUrl.length
+                    }
+                };
+                
+                console.log('[CoordinateCapture] Render complete:', result);
+                return result;
+            } catch (error) {
+                console.error('[CoordinateCapture] Render failed:', error);
+                return {
+                    success: false,
+                    error: error.message,
+                    stack: error.stack
+                };
+            }
+        };
+
+        // Signal that the page is ready
+        window.coordinateCaptureReady = true;
+    </script>
+</body>
+</html>

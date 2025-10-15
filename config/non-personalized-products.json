@@ -1,0 +1,23 @@
+{
+  "staticProductTypes": [
+    "Mugs",
+    "Mug"
+  ],
+  "productMapping": {
+    "Mugs": {
+      "productType": "PRESET_IMAGE",
+      "description": "Mugs - Static products synced with Printful (no backend processing)"
+    }
+  },
+  "identificationRules": {
+    "note": "Static products are now identified by productType/productCategory from frontend _design_params"
+  },
+  "defaults": {
+    "text": "",
+    "fontFamily": "Yuji Syuku",
+    "fontSize": 40,
+    "color": "#000000",
+    "orientation": "horizontal"
+  }
+}
+

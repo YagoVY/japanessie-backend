@@ -1,0 +1,132 @@
+{
+  "shopify_to_printful_variants": {
+    "_comment": "Map Shopify variant IDs to Printful variant IDs - UPDATE THESE WITH YOUR ACTUAL IDs",
+    
+    "comment_umbrellas": "Umbrella variants - Replace with your actual Shopify → Printful mappings",
+    "48529384756372": 12345,
+    "48529384756373": 12346,
+    "48529384756374": 12347,
+    
+    "comment_tshirts": "T-shirt variants - Existing mappings",
+    "52564464435540": 4016,
+    "52564464435541": 4017,
+    "52564464435542": 4018,
+    "52564464435543": 4019,
+    "52564464435544": 4020
+  },
+  
+  "preset_fallbacks": {
+    "_comment": "Fallback variants per preset - Used when Shopify variant not found in mapping",
+    "ja-umbrella": 12345,
+    "ja-panda-horizontal": 4016,
+    "ja-sushi": 4016,
+    "ja-tako": 4016,
+    "ja-saru": 4016,
+    "ja-sake": 4016,
+    "ja-kuruma": 4016,
+    "ja-kabuki": 4016,
+    "wave-vertical": 4016,
+    "wave-horizontal": 4016,
+    "geometric-pattern": 4016,
+    "minimalist-lines": 4016,
+    "japanese-motif": 4016
+  },
+  
+  "preset_product_variants": {
+    "_comment": "Kept for backward compatibility and metadata",
+    "ja-umbrella": {
+      "printfulProductId": 999,
+      "defaultVariantId": 12345,
+      "productType": "Umbrella",
+      "description": "Japanese Umbrella with custom design"
+    },
+    "ja-panda-horizontal": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with horizontal panda design"
+    },
+    "ja-sushi": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with sushi design"
+    },
+    "ja-tako": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with octopus design"
+    },
+    "ja-saru": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with monkey design"
+    },
+    "ja-sake": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with sake design"
+    },
+    "ja-kuruma": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with car design"
+    },
+    "ja-kabuki": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with kabuki design"
+    },
+    "wave-vertical": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with vertical wave pattern"
+    },
+    "wave-horizontal": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with horizontal wave pattern"
+    },
+    "geometric-pattern": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with geometric pattern"
+    },
+    "minimalist-lines": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with minimalist lines"
+    },
+    "japanese-motif": {
+      "printfulProductId": 71,
+      "defaultVariantId": 4016,
+      "productType": "T-shirt",
+      "description": "T-shirt with Japanese motif"
+    }
+  },
+  
+  "preset_printful_mapping": {
+    "wave-vertical": "12348",
+    "wave-horizontal": "12349",
+    "geometric-pattern": "12350",
+    "minimalist-lines": "12351",
+    "japanese-motif": "12352"
+  },
+  
+  "preset_descriptions": {
+    "wave-vertical": "Vertical wave pattern background",
+    "wave-horizontal": "Horizontal wave pattern background", 
+    "geometric-pattern": "Geometric pattern background",
+    "minimalist-lines": "Minimalist line art background",
+    "japanese-motif": "Traditional Japanese motif background"
+  }
+}
