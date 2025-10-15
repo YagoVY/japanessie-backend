@@ -2,9 +2,10 @@
 nixPkgs = ['nodejs_20', 'chromium']
 
 [phases.install]
-cmds = ['npm install --production --no-package-lock']
+cmds = ['npm install --production']
 
 [phases.build]
+cmds = ['echo "Build phase skipped - no build needed"']
 
 [start]
 cmd = 'npm start'
