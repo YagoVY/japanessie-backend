@@ -1,0 +1,48 @@
+# Railway Nixpacks configuration for Chrome/Puppeteer support
+[phases.setup]
+nixPkgs = [
+  "chromium",
+  "fonts.liberation_ttf",
+  "libGL",
+  "libGLU",
+  "xorg.libX11",
+  "xorg.libXcomposite",
+  "xorg.libXdamage",
+  "xorg.libXext",
+  "xorg.libXfixes",
+  "xorg.libXrandr",
+  "xorg.libXScrnSaver",
+  "xorg.libXtst",
+  "xorg.libXi",
+  "xorg.libXrender",
+  "xorg.libxcb",
+  "xorg.libXau",
+  "xorg.libXdmcp",
+  "libdrm",
+  "mesa",
+  "nss",
+  "atk",
+  "cairo",
+  "pango",
+  "gdk-pixbuf",
+  "gtk3",
+  "alsa-lib"
+]
+
+[phases.install]
+cmds = [
+  "npm ci --only=production",
+  "ln -sf /nix/store/*-chromium-*/bin/chromium /usr/bin/chromium-browser"
+]
+
+[phases.build]
+cmds = [
+  "echo 'Chrome dependencies installed successfully'"
+]
+
+[start]
+cmd = "npm start"
+
+[variables]
+PUPPETEER_SKIP_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium-browser"
