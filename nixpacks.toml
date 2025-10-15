@@ -1,6 +1,8 @@
-# Railway Nixpacks configuration for Chrome/Puppeteer support
+# Railway Nixpacks configuration for Node.js + Chrome/Puppeteer support
 [phases.setup]
 nixPkgs = [
+  "nodejs_20",
+  "npm",
   "chromium",
   "liberation_ttf",
   "nss",
