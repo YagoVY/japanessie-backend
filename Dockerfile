@@ -1,4 +1,3 @@
-# Use Debian (glibc) so Puppeteer's bundled Chromium works
 FROM node:20-bookworm-slim
 
 # System libs Chrome needs + CJK fonts for Japanese rendering
@@ -7,18 +6,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon0 libxfixes3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
     libdrm2 libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcairo2 libatspi2.0-0 libgtk-3-0 libxshmfence1 fonts-noto-cjk \
-  && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package*.json ./
 
-# Let Puppeteer download its matched Chromium (no postinstall hacks)
+# Copy manifests first for better Docker cache
+COPY package.json package-lock.json* ./
+
+# Let Puppeteer cache Chromium between builds (Render-friendly)
 ENV PUPPETEER_CACHE_DIR=/opt/render/project/.cache/puppeteer
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=512"
 
-RUN npm ci --omit=dev
+# Install deps (use lockfile if present)
+RUN if [ -f package-lock.json ]; then \
+      npm ci --omit=dev; \
+    else \
+      npm install --omit=dev; \
+    fi
 
+# Copy the rest of the app
 COPY . .
+
 EXPOSE 3000
 CMD ["node","server.js"]
