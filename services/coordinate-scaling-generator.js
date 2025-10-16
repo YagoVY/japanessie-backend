@@ -84,7 +84,8 @@ class CoordinateScalingGenerator {
           '--disable-dev-shm-usage',       // avoid /dev/shm crashes
           '--disable-gpu',
           '--no-zygote',
-          '--single-process',               // helps in constrained containers
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--js-flags=--max_old_space_size=128',
           '--font-render-hinting=none'
         ]
         // Do NOT set executablePath; let Puppeteer use its bundled Chromium

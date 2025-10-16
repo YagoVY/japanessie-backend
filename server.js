@@ -204,12 +204,12 @@ async function startServer() {
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
+  logger.error('[FATAL] UncaughtException:', error);
   // Don't exit immediately, let the server try to handle it
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('[FATAL] UnhandledRejection:', { reason, promise });
   // Don't exit immediately
 });
 

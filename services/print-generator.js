@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs').promises;
 const S3StorageService = require('./s3-storage');
 const ImageCompositor = require('./image-compositor');
+const withTimeout = require('../utils/withTimeout');
+const { queuePrint } = require('../utils/renderQueue');
 
 // Retry utility for Chrome startup
 async function withRetry(fn, {retries = 2, delayMs = 500} = {}) {
@@ -59,6 +61,13 @@ class PrintGenerator {
   }
 
   async generatePrintFile(designParams, options = {}) {
+    // Queue the print generation to prevent memory conflicts
+    return await queuePrint(async () => {
+      return await this._generatePrintFileInternal(designParams, options);
+    });
+  }
+
+  async _generatePrintFileInternal(designParams, options = {}) {
     let browser = null;
     
     try {
@@ -77,7 +86,8 @@ class PrintGenerator {
           '--disable-dev-shm-usage',       // avoid /dev/shm crashes
           '--disable-gpu',
           '--no-zygote',
-          '--single-process',               // helps in constrained containers
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--js-flags=--max_old_space_size=128',
           '--font-render-hinting=none'
         ]
         // Do NOT set executablePath; let Puppeteer use its bundled Chromium
@@ -86,7 +96,7 @@ class PrintGenerator {
       logger.info('Using bundled Puppeteer Chrome');
       browser = await withRetry(() => puppeteer.launch(launchOptions), {retries: 2, delayMs: 700});
 
-      const page = await browser.newPage();
+      const page = await withTimeout(browser.newPage(), 4000, 'newPage');
       
       // Capture console logs for debugging
       page.on('console', msg => {
@@ -102,30 +112,30 @@ class PrintGenerator {
       });
       
       // Set viewport to match canvas dimensions
-      await page.setViewport({
+      await withTimeout(page.setViewport({
         width: canvasSize.width,
         height: canvasSize.height,
         deviceScaleFactor: 1
-      });
+      }), 4000, 'setViewport');
 
       // Load the print renderer HTML with embedded fonts
       const htmlContent = await this.prepareHtmlWithFonts();
-      await page.setContent(htmlContent, { 
+      await withTimeout(page.setContent(htmlContent, { 
         waitUntil: 'networkidle0',
         timeout: 30000 
-      });
+      }), 10000, 'setContent');
 
       // Wait for the renderer to be ready
-      await page.waitForFunction(() => window.printRendererReady === true, {
+      await withTimeout(page.waitForFunction(() => window.printRendererReady === true, {
         timeout: 10000
-      });
+      }), 8000, 'waitForRenderer');
 
       logger.info('Print renderer loaded successfully');
 
       // Execute the rendering function
-      const result = await page.evaluate(async (params, canvasSize, isTestMode, useFrontendLogic) => {
+      const result = await withTimeout(page.evaluate(async (params, canvasSize, isTestMode, useFrontendLogic) => {
         return await window.renderPrintDesign(params, canvasSize, isTestMode, useFrontendLogic);
-      }, designParams, canvasSize, isTestMode, options.useFrontendLogic);
+      }, designParams, canvasSize, isTestMode, options.useFrontendLogic), 15000, 'pageEvaluate');
 
       if (!result.success) {
         throw new Error(`Rendering failed: ${result.error}`);
@@ -179,8 +189,21 @@ class PrintGenerator {
       logger.error('Print generation failed', { error: error.message, stack: error.stack });
       throw new Error(`Print generation failed: ${error.message}`);
     } finally {
-      if (browser) {
-        await browser.close();
+      // Always clean up page and browser to prevent memory leaks
+      try {
+        if (page && !page.isClosed()) {
+          await page.close();
+        }
+      } catch (cleanupError) {
+        logger.warn('Failed to close page:', cleanupError.message);
+      }
+      
+      try {
+        if (browser) {
+          await browser.close();
+        }
+      } catch (cleanupError) {
+        logger.warn('Failed to close browser:', cleanupError.message);
       }
     }
   }
