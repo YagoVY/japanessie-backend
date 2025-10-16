@@ -1,10 +1,60 @@
-const puppeteer = require('puppeteer');
+// services/print-generator.js
+// NOTE: Inline tiny helpers to avoid module resolution issues.
+
+console.log('[BOOT] print-generator loaded');
+
+let logger = console;
+
+function withTimeout(promise, ms, label = 'operation') {
+  let to;
+  const timeout = new Promise((_, rej) => {
+    to = setTimeout(() => rej(new Error(`Timeout: ${label} exceeded ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(to));
+}
+
+let getBrowser;
+try {
+  // Prefer local helper (CJS) to launch Puppeteer singleton
+  ({ getBrowser } = require('./puppeteer'));
+} catch (e) {
+  // Log a clear error if services/puppeteer.js is missing or path is wrong
+  console.error('[BOOT] Failed to load ./puppeteer from services/print-generator.js', e);
+  throw e;
+}
+
+// Render minimal HTML for the text → PNG
+function renderHtml(designParams) {
+  const { canvasSize = { width: 600, height: 600 }, fontFamily = 'Yuji Syuku', fontColor = '#000', textCoordinates } = designParams;
+  const color = designParams.color || fontColor;
+
+  const textLayers = (textCoordinates?.coordinates || []).map(c => (
+    `<span style="position:absolute; left:${c.x}px; top:${c.y}px; font-size:${c.fontSize}px; font-family:'${fontFamily}', sans-serif; color:${color}; line-height:1">${c.char}</span>`
+  )).join('');
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: https:; style-src 'unsafe-inline' https: data:; img-src 'self' data: https:;" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&display=swap" rel="stylesheet">
+    <style>
+      html, body { margin:0; padding:0; }
+      .stage { position: relative; width: ${canvasSize.width}px; height: ${canvasSize.height}px; background: transparent; }
+      .stage * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">${textLayers}</div>
+  </body>
+</html>`;
+}
+
 const path = require('path');
 const fs = require('fs').promises;
 const S3StorageService = require('./s3-storage');
 const ImageCompositor = require('./image-compositor');
-const withTimeout = require('../utils/withTimeout');
-const { queuePrint } = require('../utils/renderQueue');
 
 // Retry utility for Chrome startup
 async function withRetry(fn, {retries = 2, delayMs = 500} = {}) {
@@ -21,7 +71,14 @@ async function withRetry(fn, {retries = 2, delayMs = 500} = {}) {
   }
   throw lastErr;
 }
-const logger = require('../utils/logger');
+
+// Try to load logger, fallback to console if not available
+try {
+  logger = require('../utils/logger');
+} catch (e) {
+  console.warn('[BOOT] Using console logger fallback');
+  logger = console;
+}
 
 class PrintGenerator {
   constructor() {
@@ -61,10 +118,53 @@ class PrintGenerator {
   }
 
   async generatePrintFile(designParams, options = {}) {
-    // Queue the print generation to prevent memory conflicts
-    return await queuePrint(async () => {
-      return await this._generatePrintFileInternal(designParams, options);
-    });
+    return await this.generateTextPng(designParams, options);
+  }
+
+  async generateTextPng(designParams, options = {}) {
+    const start = Date.now();
+    let page;
+    try {
+      const browser = await getBrowser();
+      page = await browser.newPage();
+
+      await withTimeout(page.setViewport({ width: 1024, height: 1024, deviceScaleFactor: 2 }), 4000, 'setViewport');
+      await withTimeout(page.setContent(renderHtml(designParams), { waitUntil: 'networkidle0' }), 10000, 'setContent');
+
+      try {
+        await withTimeout(
+          page.evaluate(() => (document.fonts && document.fonts.ready) ? document.fonts.ready : null),
+          8000,
+          'fonts.ready'
+        );
+      } catch (_) { /* ignore if fonts API unavailable */ }
+
+      await new Promise(r => setTimeout(r, 150));
+
+      const buf = await withTimeout(page.screenshot({ type: 'png', omitBackground: true }), 8000, 'screenshot');
+      logger.info('✅ Print PNG generated', { service: 'tshirt-designer-backend', ms: Date.now() - start });
+      
+      // Upload to S3
+      const uploadResult = await this.s3Storage.uploadPrintFile(buf, {
+        orderId: options.orderId,
+        lineItemId: options.lineItemId,
+        designParams: designParams
+      });
+
+      return {
+        success: true,
+        printBuffer: buf,
+        s3Url: uploadResult.s3Url,
+        dimensions: { width: 1024, height: 1024 },
+        designParams,
+        rendererVersion: '1.0.0'
+      };
+    } catch (err) {
+      logger.error('❌ Print generation failed', { service: 'tshirt-designer-backend', err: err?.message, stack: err?.stack });
+      throw err;
+    } finally {
+      try { if (page && !page.isClosed()) await page.close(); } catch {}
+    }
   }
 
   async _generatePrintFileInternal(designParams, options = {}) {
