@@ -36,9 +36,6 @@ function renderHtml(designParams) {
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: https:; style-src 'unsafe-inline' https: data:; img-src 'self' data: https:;" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&display=swap" rel="stylesheet">
     <style>
       html, body { margin:0; padding:0; }
       .stage { position: relative; width: ${canvasSize.width}px; height: ${canvasSize.height}px; background: transparent; }
@@ -128,17 +125,10 @@ class PrintGenerator {
       page = await browser.newPage();
 
       await withTimeout(page.setViewport({ width: 1024, height: 1024, deviceScaleFactor: 2 }), 4000, 'setViewport');
-      await withTimeout(page.setContent(renderHtml(designParams), { waitUntil: 'networkidle0' }), 10000, 'setContent');
+      await withTimeout(page.setContent(renderHtml(designParams), { waitUntil: 'domcontentloaded', timeout: 30000 }), 20000, 'setContent');
 
-      try {
-        await withTimeout(
-          page.evaluate(() => (document.fonts && document.fonts.ready) ? document.fonts.ready : null),
-          8000,
-          'fonts.ready'
-        );
-      } catch (_) { /* ignore if fonts API unavailable */ }
-
-      await new Promise(r => setTimeout(r, 150));
+      // Wait a bit for fonts to load and rendering to stabilize
+      await new Promise(r => setTimeout(r, 650));
 
       const buf = await withTimeout(page.screenshot({ type: 'png', omitBackground: true }), 8000, 'screenshot');
       logger.info('✅ Print PNG generated', { service: 'tshirt-designer-backend', ms: Date.now() - start });
