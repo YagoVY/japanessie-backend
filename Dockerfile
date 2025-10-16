@@ -1,6 +1,6 @@
 FROM node:20-alpine
 
-# Install build dependencies for Sharp + Chromium
+# Install dependencies
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -15,18 +15,19 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
+# Copy .npmrc FIRST (before package.json)
+COPY .npmrc ./
+
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies WITH scripts (for Sharp), but tell Puppeteer to skip download
-RUN PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    npm install --production
+# npm will read .npmrc and skip Puppeteer download
+RUN npm install --production
 
 # Copy application
 COPY . .
 
-# Set Puppeteer environment
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# Runtime environment
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV NODE_ENV=production
 
