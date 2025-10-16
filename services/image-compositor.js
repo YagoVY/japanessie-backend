@@ -96,7 +96,11 @@ class ImageCompositor {
         gravity: options.gravity || 'northwest' // Default to top-left positioning
       };
 
-      logger.info('[ImageCompositor] Compositing with options', compositeOptions);
+      logger.info('[ImageCompositor] Compositing text onto background', { 
+        blend: compositeOptions.blend, 
+        gravity: compositeOptions.gravity,
+        textBufferSize: compositeOptions.input.length 
+      });
 
       const finalImage = await background
         .composite([compositeOptions])
