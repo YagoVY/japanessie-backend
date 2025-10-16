@@ -3,6 +3,22 @@ const path = require('path');
 const fs = require('fs').promises;
 const S3StorageService = require('./s3-storage');
 const ImageCompositor = require('./image-compositor');
+
+// Retry utility for Chrome startup
+async function withRetry(fn, {retries = 2, delayMs = 500} = {}) {
+  let lastErr;
+  for (let i = 0; i <= retries; i++) {
+    try { 
+      return await fn(); 
+    } catch (e) {
+      lastErr = e;
+      if (i === retries) break;
+      logger.warn(`Chrome startup attempt ${i + 1} failed, retrying in ${delayMs * (i + 1)}ms:`, e.message);
+      await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
 const logger = require('../utils/logger');
 
 class PrintGenerator {
@@ -52,34 +68,23 @@ class PrintGenerator {
       const canvasSize = options.canvasSize || { width: 3600, height: 4800 };
       const isTestMode = options.canvasSize !== undefined;
       
-      // Launch headless browser with system Chrome
+      // Launch headless browser with bundled Chrome
       const launchOptions = {
-        headless: true,
+        headless: 'new', // use new headless; avoids deprecation + is stabler
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
+          '--disable-dev-shm-usage',       // avoid /dev/shm crashes
           '--disable-gpu',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
-          '--single-process'
+          '--no-zygote',
+          '--single-process',               // helps in constrained containers
+          '--font-render-hinting=none'
         ]
+        // Do NOT set executablePath; let Puppeteer use its bundled Chromium
       };
 
-      // Use system Chrome if available (Alpine Linux deployment)
-      const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
-      
-      if (chromePath && require('fs').existsSync(chromePath)) {
-        launchOptions.executablePath = chromePath;
-        logger.info('Using system Chrome:', chromePath);
-      } else {
-        logger.info('Using bundled Chrome (system Chrome not found)');
-      }
-
-      browser = await puppeteer.launch(launchOptions);
+      logger.info('Using bundled Puppeteer Chrome');
+      browser = await withRetry(() => puppeteer.launch(launchOptions), {retries: 2, delayMs: 700});
 
       const page = await browser.newPage();
       

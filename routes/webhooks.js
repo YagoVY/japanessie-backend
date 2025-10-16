@@ -450,6 +450,24 @@ function extractAllDesignData(order) {
     
     for (const prop of properties) {
       if (prop.name.startsWith('_')) {
+        // Handle preview data URLs that might be truncated by Shopify
+        if (prop.name === '_preview_data_url' || prop.name === '_preview_mockup_url') {
+          const isLikelyTruncated = !prop.value || 
+            prop.value.length < 100 || 
+            !prop.value.includes('base64,') || 
+            !prop.value.endsWith('=') && !prop.value.endsWith('==') && !prop.value.endsWith('===');
+          
+          if (isLikelyTruncated) {
+            logger.debug('Preview data/mockup not provided or truncated; continuing with server-side generation', { 
+              service: 'tshirt-designer-backend',
+              property: prop.name,
+              valueLength: prop.value?.length || 0
+            });
+            designData[prop.name] = null;
+            continue;
+          }
+        }
+        
         // Handle JSON properties like _design_params, _layout_snapshot_v2
         try {
           designData[prop.name] = JSON.parse(prop.value);

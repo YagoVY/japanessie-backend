@@ -1,8 +1,7 @@
 FROM node:20-alpine
 
-# Install dependencies
+# Install build dependencies for Sharp (but not Chromium)
 RUN apk add --no-cache \
-    chromium \
     nss \
     freetype \
     harfbuzz \
@@ -15,22 +14,19 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy .npmrc FIRST (before package.json)
-COPY .npmrc ./
-
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# npm will read .npmrc and skip Puppeteer download
+# Install dependencies (Puppeteer will download its own Chrome)
 RUN npm install --production
 
 # Copy application
 COPY . .
 
 # Runtime environment
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV PUPPETEER_CACHE_DIR=/opt/render/project/.cache/puppeteer
 
 EXPOSE 3000
 
