@@ -1,6 +1,6 @@
 FROM node:20-alpine
 
-# Install build dependencies for Sharp (but not Chromium)
+# Install build dependencies for Sharp + headless Chrome libraries
 RUN apk add --no-cache \
     nss \
     freetype \
@@ -10,7 +10,26 @@ RUN apk add --no-cache \
     python3 \
     make \
     g++ \
-    vips-dev
+    vips-dev \
+    libnss3 \
+    libx11 \
+    libxcomposite \
+    libxdamage \
+    libxrandr \
+    libxkbcommon \
+    libxfixes \
+    libatk \
+    libatk-bridge \
+    libcups \
+    libdrm \
+    libgbm \
+    alsa-lib \
+    pango \
+    cairo \
+    at-spi2-atk \
+    gtk+3.0 \
+    libxshmfence \
+    font-noto-cjk
 
 WORKDIR /app
 
@@ -18,7 +37,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # Install dependencies (Puppeteer will download its own Chrome)
-RUN npm install --production
+RUN npm ci --omit=dev
 
 # Copy application
 COPY . .
