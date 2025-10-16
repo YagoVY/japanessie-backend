@@ -1,52 +1,24 @@
-FROM node:20-alpine
+# Use Debian (glibc) so Puppeteer's bundled Chromium works
+FROM node:20-bookworm-slim
 
-# Install build dependencies for Sharp + headless Chrome libraries
-RUN apk add --no-cache \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    python3 \
-    make \
-    g++ \
-    vips-dev \
-    libnss3 \
-    libx11 \
-    libxcomposite \
-    libxdamage \
-    libxrandr \
-    libxkbcommon \
-    libxfixes \
-    libatk \
-    libatk-bridge \
-    libcups \
-    libdrm \
-    libgbm \
-    alsa-lib \
-    pango \
-    cairo \
-    at-spi2-atk \
-    gtk+3.0 \
-    libxshmfence \
-    font-noto-cjk
+# System libs Chrome needs + CJK fonts for Japanese rendering
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libnss3 libx11-6 libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 \
+    libxkbcommon0 libxfixes3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+    libdrm2 libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
+    libcairo2 libatspi2.0-0 libgtk-3-0 libxshmfence1 fonts-noto-cjk \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY package*.json ./
 
-# Copy package files
-COPY package.json package-lock.json* ./
-
-# Install dependencies (Puppeteer will download its own Chrome)
-RUN npm ci --omit=dev
-
-# Copy application
-COPY . .
-
-# Runtime environment
+# Let Puppeteer download its matched Chromium (no postinstall hacks)
+ENV PUPPETEER_CACHE_DIR=/opt/render/project/.cache/puppeteer
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=512"
-ENV PUPPETEER_CACHE_DIR=/opt/render/project/.cache/puppeteer
 
+RUN npm ci --omit=dev
+
+COPY . .
 EXPOSE 3000
-
-CMD ["npm", "start"]
+CMD ["node","server.js"]
