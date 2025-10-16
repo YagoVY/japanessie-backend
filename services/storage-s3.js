@@ -71,8 +71,8 @@ async function uploadPrintFile(buffer, key, contentType = 'image/png') {
     Bucket: bucket,
     Key: key,
     Body: buffer,
-    ContentType: contentType,
-    ACL: 'public-read' // ensure your bucket policy allows this, or remove and serve via signed URLs/CDN
+    ContentType: contentType
+    // ACL removed - bucket policy should handle public access
   }));
 
   const url = baseUrl
