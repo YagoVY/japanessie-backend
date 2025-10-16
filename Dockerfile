@@ -1,35 +1,34 @@
-# Use Node.js 20 Alpine as base image
 FROM node:20-alpine
 
-# Install Chromium and required dependencies for Puppeteer
+# Install system dependencies including Chromium
 RUN apk add --no-cache \
     chromium \
     nss \
     freetype \
-    freetype-dev \
     harfbuzz \
     ca-certificates \
     ttf-freefont
 
-# Set working directory
 WORKDIR /app
 
-# Copy package.json first for better caching
+# Copy package.json
 COPY package.json ./
 
-# Install production dependencies
-RUN npm install --production
+# Create .npmrc to skip Puppeteer download during ALL installs
+RUN echo "puppeteer_skip_chromium_download=true" > ~/.npmrc && \
+    echo "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true" >> ~/.npmrc
 
-# Copy the rest of the application
+# Install dependencies with environment variable set
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+RUN npm install --production --loglevel verbose
+
+# Copy application files
 COPY . .
 
-# Set environment variables for Puppeteer
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# Runtime environment
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV NODE_ENV=production
 
-# Expose port 3000
-EXPOSE 3000
+EXPOSE 10000
 
-# Start the application
 CMD ["npm", "start"]
