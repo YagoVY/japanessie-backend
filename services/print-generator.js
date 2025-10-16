@@ -23,13 +23,27 @@ try {
   throw e;
 }
 
+// Map font names to system fonts available in Docker container
+function mapFontFamily(fontFamily) {
+  const fontMap = {
+    'Yuji Syuku': 'Noto Sans CJK JP',
+    'Shippori Antique': 'Noto Sans CJK JP',
+    'Huninn': 'Noto Sans CJK JP',
+    'Rampart One': 'Noto Sans CJK JP',
+    'Cherry Bomb One': 'Noto Sans CJK JP',
+    'Noto Sans JP Black': 'Noto Sans CJK JP'
+  };
+  return fontMap[fontFamily] || 'Noto Sans CJK JP';
+}
+
 // Render minimal HTML for the text → PNG
 function renderHtml(designParams) {
   const { canvasSize = { width: 600, height: 600 }, fontFamily = 'Yuji Syuku', fontColor = '#000', textCoordinates } = designParams;
   const color = designParams.color || fontColor;
+  const systemFontFamily = mapFontFamily(fontFamily);
 
   const textLayers = (textCoordinates?.coordinates || []).map(c => (
-    `<span style="position:absolute; left:${c.x}px; top:${c.y}px; font-size:${c.fontSize}px; font-family:'${fontFamily}', sans-serif; color:${color}; line-height:1">${c.char}</span>`
+    `<span style="position:absolute; left:${c.x}px; top:${c.y}px; font-size:${c.fontSize}px; font-family:'${systemFontFamily}', 'Noto Sans CJK JP', 'Noto Sans JP', sans-serif; color:${color}; line-height:1">${c.char}</span>`
   )).join('');
 
   return `<!doctype html>
@@ -39,7 +53,15 @@ function renderHtml(designParams) {
     <style>
       html, body { margin:0; padding:0; }
       .stage { position: relative; width: ${canvasSize.width}px; height: ${canvasSize.height}px; background: transparent; }
-      .stage * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+      .stage * { 
+        -webkit-font-smoothing: antialiased; 
+        -moz-osx-font-smoothing: grayscale;
+        font-family: 'Noto Sans CJK JP', 'Noto Sans JP', sans-serif;
+      }
+      @font-face {
+        font-family: 'Noto Sans CJK JP';
+        src: local('Noto Sans CJK JP');
+      }
     </style>
   </head>
   <body>
