@@ -31,6 +31,6 @@ COPY . .
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
 
-EXPOSE 10000
+EXPOSE 3000
 
 CMD ["npm", "start"]
