@@ -1,6 +1,6 @@
 FROM node:20-alpine
 
-# Install system dependencies including Chromium
+# Install Chromium and dependencies
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -11,21 +11,17 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy package.json
-COPY package.json ./
+# Copy package files
+COPY package.json package-lock.json* ./
 
-# Create .npmrc to skip Puppeteer download during ALL installs
-RUN echo "puppeteer_skip_chromium_download=true" > ~/.npmrc && \
-    echo "PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true" >> ~/.npmrc
+# CRITICAL: Install with --ignore-scripts to skip Puppeteer's post-install
+RUN npm install --production --ignore-scripts
 
-# Install dependencies with environment variable set
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-RUN npm install --production --loglevel verbose
-
-# Copy application files
+# Copy application
 COPY . .
 
-# Runtime environment
+# Set Puppeteer to use system Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV NODE_ENV=production
 
