@@ -30,6 +30,7 @@ COPY . .
 # Runtime environment
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=512"
 
 EXPOSE 3000
 
