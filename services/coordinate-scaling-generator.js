@@ -59,8 +59,8 @@ class CoordinateScalingGenerator {
         options 
       });
       
-      // Launch headless browser
-      browser = await puppeteer.launch({
+      // Launch headless browser with system Chrome
+      const launchOptions = {
         headless: true,
         args: [
           '--no-sandbox',
@@ -69,9 +69,22 @@ class CoordinateScalingGenerator {
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--disable-gpu'
+          '--disable-gpu',
+          '--single-process'
         ]
-      });
+      };
+
+      // Use system Chrome if available (Alpine Linux deployment)
+      const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
+      
+      if (chromePath && require('fs').existsSync(chromePath)) {
+        launchOptions.executablePath = chromePath;
+        logger.info('Using system Chrome:', chromePath);
+      } else {
+        logger.info('Using bundled Chrome (system Chrome not found)');
+      }
+
+      browser = await puppeteer.launch(launchOptions);
 
       const page = await browser.newPage();
       

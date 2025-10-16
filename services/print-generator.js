@@ -69,10 +69,8 @@ class PrintGenerator {
         ]
       };
 
-      // Use system Chrome if available (Railway deployment)
-      const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || 
-                        '/usr/bin/chromium-browser' ||
-                        '/usr/bin/chromium';
+      // Use system Chrome if available (Alpine Linux deployment)
+      const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
       
       if (chromePath && require('fs').existsSync(chromePath)) {
         launchOptions.executablePath = chromePath;

@@ -28,7 +28,7 @@ RUN npm install --production
 COPY . .
 
 # Runtime environment
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
 
 EXPOSE 10000
