@@ -209,7 +209,7 @@ class OrderProcessor {
       // 3. Create Printful draft order with the generated print file
       logger.info(`Creating Printful draft order for ${orderId}`);
       
-      if (printResult.s3Url) {
+      if (printResult.url) {
         try {
           // Get the line item for quantity and variant info
           const lineItem = orderData.lineItems?.[0] || orderData.line_items?.[0];
@@ -237,13 +237,13 @@ class OrderProcessor {
             quantity: quantity
           };
           
-          printfulOrder = await this.printfulClient.createDraftOrder(printfulOrderData, printResult.s3Url);
+          printfulOrder = await this.printfulClient.createDraftOrder(printfulOrderData, printResult.url);
           printfulOrderId = printfulOrder.id;
           
           logger.info(`Printful draft order created successfully`, { 
             orderId, 
             printfulOrderId,
-            printFileUrl: printResult.s3Url 
+            printFileUrl: printResult.url 
           });
         } catch (printfulError) {
           logger.error(`Printful draft order creation failed for ${orderId}:`, printfulError.message);
@@ -258,7 +258,8 @@ class OrderProcessor {
         ...initialOrderData,
         status: printfulOrderId ? 'sent_to_printful' : 'ready_for_review',
         printFile: {
-          s3Url: printResult.s3Url,
+          url: printResult.url,
+          key: printResult.key,
           dimensions: printResult.dimensions,
           bufferSize: printResult.printBuffer.length
         },
@@ -286,7 +287,7 @@ class OrderProcessor {
       
       logger.info(`Order processing completed for ${orderId}`, {
         processingTimeMs: Date.now() - startTime,
-        printFileUrl: printResult.s3Url,
+            printFileUrl: printResult.url,
         status: 'ready_for_review'
       });
       
@@ -294,7 +295,7 @@ class OrderProcessor {
         success: true,
         orderId,
         status: printfulOrderId ? 'sent_to_printful' : 'ready_for_review',
-        printFileUrl: printResult.s3Url,
+            printFileUrl: printResult.url,
         printfulOrderId,
         dimensions: printResult.dimensions,
         processingTimeMs: Date.now() - startTime
@@ -387,13 +388,13 @@ class OrderProcessor {
           });
         }
         
-        if (printResult.success && printResult.s3Url) {
+        if (printResult.success && printResult.url) {
           printResults.push({
             lineItemId: designData.lineItemId,
             variantId: designData.variantId,
             shopifyVariantId: designParams.shopifyVariantId || designData.variantId,
             quantity: designData.quantity,
-            printFileUrl: printResult.s3Url,
+            printFileUrl: printResult.url,
             requiresPrintFile: true,
             designParams: designParams
           });

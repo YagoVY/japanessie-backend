@@ -53,7 +53,7 @@ function renderHtml(designParams) {
 
 const path = require('path');
 const fs = require('fs').promises;
-const S3StorageService = require('./s3-storage');
+const { uploadPrintFile } = require('./storage-s3');
 const ImageCompositor = require('./image-compositor');
 
 // Retry utility for Chrome startup
@@ -82,7 +82,6 @@ try {
 
 class PrintGenerator {
   constructor() {
-    this.s3Storage = new S3StorageService();
     this.imageCompositor = new ImageCompositor();
     this.printRendererPath = path.join(__dirname, '../print-renderer.html');
     this.base64Fonts = null;
@@ -144,17 +143,21 @@ class PrintGenerator {
       const buf = await withTimeout(page.screenshot({ type: 'png', omitBackground: true }), 8000, 'screenshot');
       logger.info('✅ Print PNG generated', { service: 'tshirt-designer-backend', ms: Date.now() - start });
       
+      // Build a deterministic key: /prints/{orderId}/{lineItemId}.png
+      const orderId = options?.orderId || 'unknown-order';
+      const lineItemId = options?.lineItemId || 'item';
+      const presetId = designParams?.presetId || 'preset';
+      const ts = Date.now();
+      const key = `prints/${orderId}/${lineItemId}-${presetId}-${ts}.png`;
+
       // Upload to S3
-      const uploadResult = await this.s3Storage.uploadPrintFile(buf, {
-        orderId: options.orderId,
-        lineItemId: options.lineItemId,
-        designParams: designParams
-      });
+      const { url } = await uploadPrintFile(buf, key, 'image/png');
 
       return {
         success: true,
         printBuffer: buf,
-        s3Url: uploadResult.s3Url,
+        url: url,
+        key: key,
         dimensions: { width: 1024, height: 1024 },
         designParams,
         rendererVersion: '1.0.0'
@@ -366,23 +369,18 @@ class PrintGenerator {
       
       // Step 5: Upload composited image to S3
       let s3Url = null;
+      let s3Key = null;
       if (options.orderId) {
         try {
-          const uploadResult = await this.s3Storage.uploadBuffer(
-            `prints/${options.orderId}/${Date.now()}-preset-print.png`,
-            compositedBuffer,
-            'image/png',
-            {
-              orderId: options.orderId,
-              type: 'preset-print-file',
-              presetId: presetId,
-              dpi: textResult.dimensions.dpi,
-              dimensions: `${textResult.dimensions.width}x${textResult.dimensions.height}`,
-              generatedAt: new Date().toISOString()
-            }
-          );
-          s3Url = uploadResult;
-          logger.info('Preset print file uploaded to S3', { s3Url });
+          const orderId = options.orderId;
+          const lineItemId = options.lineItemId || 'item';
+          const ts = Date.now();
+          const key = `prints/${orderId}/${lineItemId}-${presetId}-${ts}.png`;
+          
+          const { url } = await uploadPrintFile(compositedBuffer, key, 'image/png');
+          s3Url = url;
+          s3Key = key;
+          logger.info('Preset print file uploaded to S3', { s3Url, s3Key });
         } catch (s3Error) {
           logger.warn(`S3 not configured, skipping preset print file upload: ${s3Error.message}`);
         }
@@ -391,7 +389,8 @@ class PrintGenerator {
       return {
         success: true,
         printBuffer: compositedBuffer,
-        s3Url,
+        url: s3Url,
+        key: s3Key,
         dimensions: textResult.dimensions,
         metadata: {
           generatedAt: new Date().toISOString(),
